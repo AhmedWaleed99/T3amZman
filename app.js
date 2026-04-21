@@ -1,95 +1,82 @@
 /**
- * app.js — منطق تطبيق قائمة طعم زمان (جلب البيانات من Google Sheets)
+ * app.js — نسخة مخصصة لهيكل (No, Item, Price)
  */
 
-// ضع رابط الـ CSV الخاص بك هنا
+// 1. استبدل الرابط أدناه برابط CSV الخاص بك من Google Sheets
 const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS_O0h_6_p_your_id_here/pub?output=csv';
 
-// ---- Tab Switching ----
-const tabBtns   = document.querySelectorAll('.tab-btn');
+// ---- منطق التنقل بين التبويبات ----
+const tabBtns = document.querySelectorAll('.tab-btn');
 const tabPanels = document.querySelectorAll('.tab-panel');
 
 tabBtns.forEach(btn => {
-  btn.addEventListener('click', () => {
-    const target = btn.dataset.tab;
-    tabBtns.forEach(b => b.classList.remove('active'));
-    tabPanels.forEach(p => p.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById('tab-' + target).classList.add('active');
-  });
+    btn.addEventListener('click', () => {
+        const target = btn.dataset.tab;
+        tabBtns.forEach(b => b.classList.remove('active'));
+        tabPanels.forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        const panel = document.getElementById('tab-' + target);
+        if (panel) panel.classList.add('active');
+    });
 });
 
-// ---- Fetch and Parse CSV ----
-async function loadMenuData() {
+// ---- جلب البيانات من Google Sheets ----
+async function loadMenuFromSheet() {
     try {
         const response = await fetch(SHEET_CSV_URL);
-        const data = await response.text();
+        if (!response.ok) throw new Error('فشل الاتصال');
         
-        // تحويل الـ CSV إلى مصفوفة
-        const rows = data.split('\n').slice(1); // تجاهل صف العنوان
-        const menu = { sandwiches: [], shamlola: [], pizza: [], koshary: [], contacts: [] };
+        const csvText = await response.text();
+        // تقسيم النص إلى أسطر وتجاهل الهيدر (العناوين)
+        const rows = csvText.split('\n').filter(row => row.trim() !== '').slice(1);
 
-        rows.forEach(row => {
-            const [category, no, name, price, branch, phone] = row.split(',').map(item => item.trim());
-            
-            if (category === 'contacts') {
-                menu.contacts.push({ branch, phone });
-            } else if (menu[category]) {
-                menu[category].push({ no, name, price });
-            }
+        // تحويل كل سطر إلى كائن برمجي بناءً على ترتيب أعمدتك A, B, C
+        const allItems = rows.map(row => {
+            const cols = row.split(',').map(c => c.trim());
+            return {
+                no: cols[0] || '',    // العمود A: No
+                name: cols[1] || '',  // العمود B: Item
+                price: cols[2] || ''  // العمود C: Price
+            };
         });
 
-        renderAll(menu);
+        // عرض البيانات في أول قسم (سندوتشات) كافتراضي
+        renderMenuGrid('sandwiches-grid', allItems);
+        
+        // تنظيف الأقسام الأخرى إذا كانت فارغة في الشيت
+        renderMenuGrid('shamlola-grid', []);
+        renderMenuGrid('pizza-grid', []);
+        renderMenuGrid('koshary-grid', []);
+
     } catch (error) {
-        console.error("خطأ في جلب البيانات:", error);
-        document.querySelectorAll('.menu-grid').forEach(grid => {
-            grid.innerHTML = `<div class="empty-msg">حدث خطأ أثناء تحميل القائمة</div>`;
-        });
+        console.error("Error:", error);
+        document.getElementById('sandwiches-grid').innerHTML = 
+            `<div class="empty-msg">تأكد من نشر الشيت بصيغة CSV ومن الرابط الصحيح</div>`;
     }
 }
 
-// ---- Render Functions ----
+// ---- وظيفة الرسم على الشاشة ----
 function renderMenuGrid(gridId, items) {
-  const grid = document.getElementById(gridId);
-  if (!grid) return;
-  if (!items || items.length === 0) {
-    grid.innerHTML = `<div class="empty-msg">لا توجد أصناف متاحة حالياً</div>`;
-    return;
-  }
+    const grid = document.getElementById(gridId);
+    if (!grid) return;
 
-  grid.innerHTML = items.map(item => `
-    <div class="menu-card">
-      <span class="card-number">${String(item.no).padStart(2,'0')}</span>
-      <span class="card-name">${item.name}</span>
-      <div class="card-price">
-        <span class="price-amount">${item.price}</span>
-        <span class="price-currency">ج.م</span>
-      </div>
-    </div>
-  `).join('');
+    if (!items || items.length === 0) {
+        grid.innerHTML = `<div class="empty-msg">الأصناف قيد التحديث...</div>`;
+        return;
+    }
+
+    // بناء الكروت بنفس التصميم العصري (Dark Mode) المطلوب
+    grid.innerHTML = items.map(item => `
+        <div class="menu-card">
+            <span class="card-number">${String(item.no).padStart(2, '0')}</span>
+            <span class="card-name">${item.name}</span>
+            <div class="card-price">
+                <span class="price-amount">${item.price}</span>
+                <span class="price-currency">ج.م</span>
+            </div>
+        </div>
+    `).join('');
 }
 
-function renderContacts(items) {
-  const grid = document.getElementById('contacts-grid');
-  if (!grid) return;
-  grid.innerHTML = items.map((c, i) => `
-    <div class="contact-card" style="animation-delay:${i * 0.08}s">
-      <div class="contact-icon">📍</div>
-      <div class="contact-branch">${c.branch}</div>
-      <div class="contact-phone">
-        <span>📞</span>
-        <a href="tel:${c.phone}">${c.phone}</a>
-      </div>
-    </div>
-  `).join('');
-}
-
-function renderAll(menu) {
-  renderMenuGrid('sandwiches-grid', menu.sandwiches);
-  renderMenuGrid('shamlola-grid',   menu.shamlola);
-  renderMenuGrid('pizza-grid',      menu.pizza);
-  renderMenuGrid('koshary-grid',    menu.koshary);
-  renderContacts(menu.contacts);
-}
-
-document.addEventListener('DOMContentLoaded', loadMenuData);
+// تشغيل الوظيفة عند تحميل الصفحة
+document.addEventListener('DOMContentLoaded', loadMenuFromSheet);
